@@ -1,7 +1,7 @@
 from pathlib import Path
-from langchain_community.document_loaders import DirectoryLoader
+from langchain_community.document_loaders import DirectoryLoader, TextLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain.schema import Document
+from langchain_core.documents import Document
 
 
 def load_and_chunk_wiki(wiki_dir: str) -> list[Document]:
@@ -13,7 +13,8 @@ def load_and_chunk_wiki(wiki_dir: str) -> list[Document]:
     loader = DirectoryLoader(
         path=str(wiki_path),
         glob="**/*.md",
-        loader_cls=None,  # Will use default markdown loader
+        loader_cls=TextLoader,
+        loader_kwargs={"autodetect_encoding": True},
         show_progress=True,
     )
 

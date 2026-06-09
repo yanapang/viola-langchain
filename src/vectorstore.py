@@ -1,22 +1,19 @@
-import os
 from pathlib import Path
+
+from langchain_core.documents import Document
 from langchain_chroma import Chroma
-from langchain_ollama import OllamaEmbeddings
-from langchain.schema import Document
+from langchain_core.embeddings import Embeddings
 
 
 def build_or_load_vectorstore(
     docs: list[Document] | None = None,
-    embed_model: str = "nomic-embed-text",
-    ollama_base_url: str = "http://localhost:11434",
+    embeddings: Embeddings | None = None,
     persist_dir: str = ".chroma",
 ) -> Chroma:
     """Build a new vectorstore from docs or load existing one."""
 
-    embeddings = OllamaEmbeddings(
-        model=embed_model,
-        base_url=ollama_base_url,
-    )
+    if embeddings is None:
+        raise ValueError("embeddings must be provided")
 
     persist_path = Path(persist_dir)
 
