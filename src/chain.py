@@ -9,20 +9,40 @@ def format_docs(docs):
     return "\n\n".join(doc.page_content for doc in docs)
 
 
-def build_rag_chain(retriever, llm: BaseChatModel):
-    """Build the RAG chain: retriever -> prompt -> llm -> output."""
+def _prompt_for_language(language: str) -> PromptTemplate:
+    if language == "ko":
+        template = """제공된 맥락만을 바탕으로 질문에 답하세요.
+맥락에 답이 없으면 모른다고 한국어로 답하세요.
 
-    prompt = PromptTemplate(
-        template="""You are a helpful assistant answering questions based on the provided context.
+맥락:
+{context}
+
+질문: {question}
+
+답변:"""
+    else:
+        template = """You are a helpful assistant answering questions based on the provided context.
+If the context does not contain the answer, say you do not know.
 
 Context:
 {context}
 
 Question: {question}
 
-Answer:""",
+Answer:"""
+
+    return PromptTemplate(
+        template=template,
         input_variables=["context", "question"],
     )
+
+
+def build_rag_chain(
+    retriever, llm: BaseChatModel, response_language: str = "ko"
+):
+    """Build the RAG chain: retriever -> prompt -> llm -> output."""
+
+    prompt = _prompt_for_language(response_language)
 
     chain = (
         {

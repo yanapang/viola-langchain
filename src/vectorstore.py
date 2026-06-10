@@ -1,3 +1,4 @@
+import shutil
 from pathlib import Path
 
 from langchain_core.documents import Document
@@ -5,10 +6,17 @@ from langchain_chroma import Chroma
 from langchain_core.embeddings import Embeddings
 
 
+def _reset_persist_dir(persist_path: Path) -> None:
+    if persist_path.exists():
+        shutil.rmtree(persist_path)
+    persist_path.mkdir(parents=True, exist_ok=True)
+
+
 def build_or_load_vectorstore(
     docs: list[Document] | None = None,
     embeddings: Embeddings | None = None,
     persist_dir: str = ".chroma",
+    rebuild: bool = False,
 ) -> Chroma:
     """Build a new vectorstore from docs or load existing one."""
 
@@ -16,6 +24,8 @@ def build_or_load_vectorstore(
         raise ValueError("embeddings must be provided")
 
     persist_path = Path(persist_dir)
+    if rebuild:
+        _reset_persist_dir(persist_path)
 
     if persist_path.exists() and list(persist_path.iterdir()):
         print(f"Loading existing vectorstore from {persist_dir}")
@@ -32,7 +42,6 @@ def build_or_load_vectorstore(
             embedding=embeddings,
             persist_directory=str(persist_path),
         )
-        vectorstore.persist()
         print(f"Vectorstore persisted to {persist_dir}")
 
     return vectorstore

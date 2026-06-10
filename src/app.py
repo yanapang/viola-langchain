@@ -35,6 +35,38 @@ def _embed_label(settings) -> str:
     return "unknown"
 
 
+def _embed_meta_path(persist_dir: str) -> Path:
+    return Path(persist_dir) / ".embed_model"
+
+
+def _needs_rebuild(settings, persist_path: Path, rebuild: bool) -> bool:
+    if rebuild:
+        return True
+    if not persist_path.exists() or not any(persist_path.iterdir()):
+        return True
+
+    meta_path = _embed_meta_path(settings.persist_dir)
+    if not meta_path.exists():
+        print("No embedding model metadata found, rebuilding vectorstore...")
+        return True
+
+    current = f"{settings.embed_provider}:{_embed_label(settings)}"
+    stored = meta_path.read_text(encoding="utf-8").strip()
+    if stored != current:
+        print(f"Embedding model changed ({stored} -> {current}), rebuilding...")
+        return True
+
+    return False
+
+
+def _save_embed_meta(settings) -> None:
+    meta_path = _embed_meta_path(settings.persist_dir)
+    meta_path.write_text(
+        f"{settings.embed_provider}:{_embed_label(settings)}",
+        encoding="utf-8",
+    )
+
+
 def main():
     settings = load_settings()
     rebuild = "--rebuild" in sys.argv
@@ -44,14 +76,7 @@ def main():
     llm = create_llm(settings)
 
     persist_path = Path(settings.persist_dir)
-    if persist_path.exists() and list(persist_path.iterdir()) and not rebuild:
-        print("Using cached vectorstore...")
-        vectorstore = build_or_load_vectorstore(
-            docs=None,
-            embeddings=embeddings,
-            persist_dir=settings.persist_dir,
-        )
-    else:
+    if _needs_rebuild(settings, persist_path, rebuild):
         if rebuild:
             print("Rebuilding vectorstore...")
         print("Loading wiki documents...")
@@ -60,10 +85,23 @@ def main():
             docs=docs,
             embeddings=embeddings,
             persist_dir=settings.persist_dir,
+            rebuild=True,
+        )
+        _save_embed_meta(settings)
+    else:
+        print("Using cached vectorstore...")
+        vectorstore = build_or_load_vectorstore(
+            docs=None,
+            embeddings=embeddings,
+            persist_dir=settings.persist_dir,
         )
 
     retriever = get_retriever(vectorstore, k=3)
-    chain, _ = build_rag_chain(retriever=retriever, llm=llm)
+    chain, _ = build_rag_chain(
+        retriever=retriever,
+        llm=llm,
+        response_language=settings.response_language,
+    )
 
     print("\n" + "=" * 60)
     print("RAG System Ready!")
