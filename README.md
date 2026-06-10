@@ -1,15 +1,18 @@
 # LangChain RAG System with Local Wiki
 
-A retrieval-augmented generation (RAG) system that connects your local markdown wiki with a local LLM (Ollama) using LangChain. Ask questions about your wiki content and get accurate answers grounded in your knowledge base.
+A retrieval-augmented generation (RAG) system that connects your local markdown wiki with an LLM using LangChain. Ask questions about your wiki content and get answers grounded in your knowledge base.
 
 ## Features
 
-- **Local-first**: Run everything locally with no API keys or internet required
+- **Local-first**: Default Ollama setup runs locally with no API keys required
+- **Multi-provider**: Swap LLM/embedding backends — Ollama, Hugging Face, OpenAI, or Cursor
+- **Korean support**: Korean response prompts and multilingual embedding defaults (`bge-m3`)
 - **Semantic search**: Uses embeddings to find relevant wiki sections
 - **Persistent storage**: Vector database caches embeddings for fast startup
-- **Easy wiki management**: Drop markdown files into the `wiki/` directory
+- **Auto-reindex**: Rebuilds the vectorstore when the embedding model changes
+- **Easy wiki management**: Point `WIKI_DIR` at any directory of `.md` files
 - **Interactive CLI**: Simple question-and-answer interface
-- **Configurable**: All settings available via `.env`
+- **Configurable**: All settings available via `.env` and `.env.local`
 
 ## Prerequisites
 
@@ -19,11 +22,19 @@ Before you begin, ensure you have:
 2. **Ollama** installed and running
    - Download from [ollama.ai](https://ollama.ai)
    - Start the Ollama service on your machine
-3. **Required Ollama models**:
+3. **Required Ollama models** (default setup uses two different models):
+
+   | Role | Variable | Default model | Purpose |
+   |------|----------|---------------|---------|
+   | Chat (LLM) | `OLLAMA_LLM_MODEL` | `qwen2.5:7b` | Generates answers |
+   | Embedding | `OLLAMA_EMBED_MODEL` | `bge-m3` | Semantic search |
+
    ```bash
-   ollama pull llama3
-   ollama pull nomic-embed-text
+   ollama pull qwen2.5:7b    # LLM — answer generation
+   ollama pull bge-m3        # Embedding — retrieval
    ```
+
+   Chat and embedding models are **not interchangeable**. Do not put `bge-m3` in `OLLAMA_LLM_MODEL`.
 
 ## Installation
 
@@ -56,7 +67,9 @@ This project uses a **Python virtual environment (`venv`)**. Install dependencie
    ```bash
    cp .env.example .env
    ```
-   Edit `.env` to match your setup (usually defaults are fine if Ollama is running locally).
+   Edit `.env` to match your setup. **`WIKI_DIR` must be set to the path of your own markdown wiki** — the value in `.env.example` (`./wiki`) is only a placeholder. Use an absolute or relative path to wherever your `.md` files live.
+
+   For personal overrides without touching `.env`, create `.env.local` (loaded with higher priority).
 
 ### Cursor / VS Code
 
@@ -79,14 +92,23 @@ python src/app.py
 ```
 
 On first run, the system will:
-1. Load all markdown files from your `wiki/` directory
-2. Split them into chunks
-3. Generate embeddings using `nomic-embed-text`
-4. Build and persist a vector database in `.chroma/`
+1. Validate that required Ollama models are installed
+2. Load all markdown files from `WIKI_DIR`
+3. Split them into chunks
+4. Generate embeddings using `OLLAMA_EMBED_MODEL` (default: `bge-m3`)
+5. Build and persist a vector database in `.chroma/`
+6. Save embedding model metadata to `.chroma/.embed_model`
 
-Then it enters interactive mode.
+Then it enters interactive mode. Subsequent runs load the cached vectorstore unless a rebuild is needed.
 
 ### Asking Questions
+
+```
+Ask a question: 비올라 프로젝트 구조는?
+Searching...
+
+Answer: (한국어로 위키 맥락 기반 답변)
+```
 
 ```
 Ask a question: What is LangChain?
@@ -99,57 +121,107 @@ Type `exit` to quit the program.
 
 ### Adding Wiki Files
 
-Simply add `.md` files to the `wiki/` directory, then:
+Add or update `.md` files in the directory set by `WIKI_DIR`, then:
 
 ```bash
 source venv/bin/activate
 python src/app.py --rebuild
 ```
 
-Without `--rebuild`, the system uses the cached vector database. Use `--rebuild` when you add, remove, or significantly update wiki files.
+### When to Rebuild
+
+| Situation | Action |
+|-----------|--------|
+| Wiki files added, removed, or updated | `python src/app.py --rebuild` |
+| `OLLAMA_EMBED_MODEL` or `EMBED_PROVIDER` changed | Automatic rebuild on next run |
+| `OLLAMA_LLM_MODEL` changed only | No rebuild needed |
+| Chroma errors or stale index | `rm -rf .chroma` then `python src/app.py` |
+
+Without `--rebuild`, the system uses the cached vector database.
+
+## Korean Wiki Setup (Recommended)
+
+For Korean wikis and Korean questions, use this combination (`WIKI_DIR` → your wiki path):
+
+```env
+WIKI_DIR=/path/to/your/korean-wiki
+LLM_PROVIDER=ollama
+EMBED_PROVIDER=ollama
+OLLAMA_LLM_MODEL=qwen2.5:7b
+OLLAMA_EMBED_MODEL=bge-m3
+RESPONSE_LANGUAGE=ko
+```
+
+- **`bge-m3`**: Multilingual embeddings — good for Korean retrieval
+- **`qwen2.5:7b`**: Lightweight chat model (~5 GB) with solid Korean support
+- **`qwen3.6:27b`**: Heavier option if you need higher answer quality (~17 GB)
+- **`nomic-embed-text`**: English-focused embedding — not recommended for Korean wikis
+
+There is no `qwen3.6:7b` tag on Ollama. For a lighter Qwen setup, use `qwen2.5:7b` or `qwen2.5:3b`.
 
 ## Configuration
 
-Copy `.env.example` to `.env` and edit as needed. See `.env.example` for all options (Ollama, Hugging Face, OpenAI, Cursor).
+Copy `.env.example` to `.env` and edit as needed. See `.env.example` for all options.
 
-Common variables for the default Ollama setup:
+> **Note:** `WIKI_DIR` is not shared across users. Each person must set it in their own `.env` (or `.env.local`) to point at their wiki directory. The default `./wiki` is the bundled sample folder; replace it with your actual wiki path before running.
+
+### Ollama (default)
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `WIKI_DIR` | `./wiki` | Path to your markdown wiki files |
+| `WIKI_DIR` | `./wiki` | **User-defined** path to markdown wiki files (you must set this) |
+| `PERSIST_DIR` | `.chroma` | Vector database storage path |
 | `LLM_PROVIDER` | `ollama` | LLM backend (`ollama`, `huggingface`, `openai`, `cursor`) |
 | `EMBED_PROVIDER` | `ollama` | Embedding backend (`ollama`, `huggingface`) |
 | `OLLAMA_BASE_URL` | `http://localhost:11434` | Ollama service endpoint |
-| `OLLAMA_LLM_MODEL` | `llama3` | LLM model for generating answers |
-| `OLLAMA_EMBED_MODEL` | `nomic-embed-text` | Embedding model to use |
+| `OLLAMA_LLM_MODEL` | `qwen2.5:7b` | Chat model for generating answers |
+| `OLLAMA_EMBED_MODEL` | `bge-m3` | Embedding model for retrieval |
+| `RESPONSE_LANGUAGE` | `ko` | Answer language (`ko` or `en`) |
 
 Legacy aliases `LLM_MODEL` and `EMBED_MODEL` still work and map to the Ollama settings above.
 
-Example `.env`:
+Example `.env` (set `WIKI_DIR` to your wiki location):
 ```env
-WIKI_DIR=./wiki
+WIKI_DIR=/path/to/your/wiki
 LLM_PROVIDER=ollama
 EMBED_PROVIDER=ollama
 OLLAMA_BASE_URL=http://localhost:11434
-OLLAMA_LLM_MODEL=llama3
-OLLAMA_EMBED_MODEL=nomic-embed-text
+OLLAMA_LLM_MODEL=qwen2.5:7b
+OLLAMA_EMBED_MODEL=bge-m3
+RESPONSE_LANGUAGE=ko
 ```
+
+### Other Providers
+
+| Provider | `LLM_PROVIDER` | Required packages | API key |
+|----------|----------------|-------------------|---------|
+| Ollama | `ollama` | `requirements-ollama.txt` | None |
+| Hugging Face | `huggingface` | `requirements-extra.txt` | `HUGGINGFACEHUB_API_TOKEN` |
+| OpenAI | `openai` | `requirements-extra.txt` | `OPENAI_API_KEY` |
+| Cursor | `cursor` | `requirements-extra.txt` | `CURSOR_API_KEY` |
+
+Set `HF_LLM_MODEL`, `HF_EMBED_MODEL`, `OPENAI_LLM_MODEL`, or `CURSOR_MODEL` in `.env` as needed. See `.env.example` for all variables.
 
 ## Project Structure
 
 ```
 langchain-llm/
 ├── src/
-│   ├── config.py             # Load settings from .env
-│   ├── providers/            # LLM & embedding factory (Ollama, HF, etc.)
+│   ├── config.py             # Load settings from .env / .env.local
+│   ├── providers/
+│   │   ├── llm_factory.py        # Create LLM from provider settings
+│   │   ├── embeddings_factory.py # Create embeddings from provider settings
+│   │   ├── ollama_health.py      # Validate Ollama models at startup
+│   │   └── cursor_adapter.py     # Cursor Agent API adapter
 │   ├── loader.py             # Load and chunk markdown files
 │   ├── vectorstore.py        # Build/load Chroma vector store
-│   ├── chain.py              # RAG chain assembly
+│   ├── chain.py              # RAG chain assembly (Korean/English prompts)
 │   └── app.py                # CLI entry point
 ├── venv/                     # Python virtual environment (local, gitignored)
 ├── wiki/
 │   └── sample.md             # Example wiki file (add your own)
 ├── .chroma/                  # Vector database (auto-created)
+│   └── .embed_model          # Tracks which embedding model built the index
 ├── requirements-ollama.txt   # Minimal Python dependencies (default)
 ├── requirements-extra.txt    # Optional HF / Cursor providers
 ├── requirements.txt          # Points to requirements-ollama.txt
@@ -169,7 +241,7 @@ Wiki Files (.md)
     ↓
 [vectorstore.py] - Generate embeddings & store in Chroma
     ↓
-[chain.py] - Build RAG chain
+[chain.py] - Build RAG chain (language-aware prompt)
     ↓
 [app.py] - Interactive loop
 ```
@@ -177,28 +249,29 @@ Wiki Files (.md)
 ### Component Details
 
 **loader.py**:
-- Recursively loads all `.md` files from `wiki/`
+- Recursively loads all `.md` files from `WIKI_DIR`
 - Splits documents into chunks (500 chars, 50 char overlap)
 - Returns list of `Document` objects
 
 **vectorstore.py**:
-- Uses `OllamaEmbeddings` to convert text to vectors
-- Persists vectors in `.chroma/` directory
-- Loads cached vectorstore on startup (unless `--rebuild`)
+- Builds embeddings via the configured provider factory
+- Persists vectors in `.chroma/`
+- Clears and rebuilds the index when `rebuild=True`
 
 **providers/**:
 - `llm_factory.py` / `embeddings_factory.py` create models from `LLM_PROVIDER` / `EMBED_PROVIDER`
+- `ollama_health.py` checks Ollama connectivity and model availability before startup
 - Supports Ollama (default), Hugging Face, OpenAI, and Cursor Agent API
 
 **chain.py**:
-- Accepts any LangChain `BaseChatModel` from the factory
-- Defines a system prompt for context-aware responses
+- Selects Korean or English prompt based on `RESPONSE_LANGUAGE`
 - Assembles LCEL chain: retriever → formatter → prompt → LLM → output parser
 
 **app.py**:
-- Loads settings, builds embeddings and LLM via factories
+- Loads settings, validates Ollama models, builds embeddings and LLM via factories
+- Auto-rebuilds when embedding model metadata is missing or changed
 - Runs the interactive question-answer loop
-- Handles `--rebuild` flag for reindexing
+- Handles `--rebuild` flag for wiki content changes
 
 ## How RAG Works
 
@@ -263,7 +336,7 @@ Or run explicitly:
 
 ### Ollama not responding
 
-**Error**: `Connection refused` or `Connection error`
+**Error**: `Connection refused`, `Connection error`, or `Cannot reach Ollama`
 
 **Solution**:
 ```bash
@@ -280,29 +353,34 @@ Verify Ollama is at the URL in your `.env` (default: `http://localhost:11434`).
 
 ### Model not found
 
-**Error**: `model "nomic-embed-text" not found` or similar
+**Error**: `model "qwen2.5:7b" not found` or `Required Ollama model(s) are not installed`
 
-**Cause**: RAG needs **two** Ollama models — an LLM for answers and a separate embedding model for search. Having only `qwen3.6:27b` (or `llama3`) is not enough.
+**Cause**: RAG needs **two** Ollama models — a chat model for answers and a separate embedding model for search.
 
-**Solution**:
+**Solution**: The app prints the exact `ollama pull` commands on startup. Typically:
 ```bash
-# Pull both models configured in .env
-ollama pull nomic-embed-text    # embedding (OLLAMA_EMBED_MODEL)
-ollama pull qwen3.6:27b         # LLM (OLLAMA_LLM_MODEL) — if not already installed
+ollama pull qwen2.5:7b    # LLM (OLLAMA_LLM_MODEL)
+ollama pull bge-m3        # Embedding (OLLAMA_EMBED_MODEL)
 
-# Verify they're installed
 ollama list
-
-# Rebuild vectorstore after embedding model is available
-source venv/bin/activate
 python src/app.py --rebuild
+```
+
+### `"bge-m3" does not support chat`
+
+**Cause**: An embedding model was set as `OLLAMA_LLM_MODEL`. Embedding models cannot generate chat responses.
+
+**Solution**: Keep roles separate:
+```env
+OLLAMA_LLM_MODEL=qwen2.5:7b    # chat
+OLLAMA_EMBED_MODEL=bge-m3      # embedding
 ```
 
 ### Vector database errors
 
-**Error**: Chroma-related errors
+**Error**: Chroma-related errors or poor retrieval after model change
 
-**Solution**: Delete `.chroma/` directory and rebuild:
+**Solution**: Delete `.chroma/` and rebuild:
 ```bash
 source venv/bin/activate
 rm -rf .chroma
@@ -315,22 +393,25 @@ The vector database will be rebuilt from scratch.
 
 - **Add more wiki content**: The system can only answer based on what's in your wiki
 - **Improve wiki structure**: Clear, well-organized sections work better than walls of text
-- **Adjust temperature**: Edit `src/chain.py` to change `temperature` parameter (lower = more focused, higher = more creative)
-- **Try different models**: Change `OLLAMA_LLM_MODEL` in `.env` (e.g., try `llama2` or other Ollama models)
+- **Use the right embedding model**: For Korean wikis, keep `OLLAMA_EMBED_MODEL=bge-m3`
+- **Adjust temperature**: Edit `temperature` in `src/providers/llm_factory.py` (lower = more focused)
+- **Try a larger LLM**: Switch `OLLAMA_LLM_MODEL` to `qwen3.6:27b` if `qwen2.5:7b` is too weak
 
 ## Performance Tips
 
 - **First run is slow**: Embedding generation takes time. Subsequent runs use cached vectors
-- **Chunk size matters**: Smaller chunks = better relevance but more API calls. Edit `src/loader.py` if needed
-- **k parameter**: Currently retrieves top 3 documents. Adjust in `src/app.py` (get_retriever call) for more/fewer results
+- **LLM size matters**: `qwen2.5:7b` is much faster than `qwen3.6:27b` on local hardware
+- **Chunk size matters**: Smaller chunks = better relevance but more embedding calls. Edit `src/loader.py` if needed
+- **k parameter**: Currently retrieves top 3 documents. Adjust in `src/app.py` (`get_retriever` call) for more/fewer results
 
 ## Example Wiki Content
 
 The project includes `wiki/sample.md` as an example. You can:
 
 1. Replace it with your own markdown files
-2. Add multiple files to the directory
+2. Add multiple files to the directory (including nested folders)
 3. Use any markdown format (headers, lists, code blocks, etc.)
+4. Point `WIKI_DIR` at an external wiki directory
 
 Example structure:
 ```markdown
@@ -342,11 +423,6 @@ Content here...
 ## Topic 2
 - Point 1
 - Point 2
-
-## Code Examples
-```python
-# Your code
-```
 ```
 
 All content will be indexed and searchable.
@@ -359,70 +435,59 @@ To verify everything is set up correctly:
 ```bash
 source venv/bin/activate
 
-# Ensure Ollama models are available
-ollama list
+ollama list    # should show qwen2.5:7b and bge-m3
 
-# Start the app (models will be loaded on first question)
 python src/app.py
 
-# Ask a test question about content in wiki/sample.md
-# Example: "What is LangChain?"
+# Korean wiki example:
+# "이 프로젝트의 목적은?"
+
+# English sample wiki example:
+# "What is LangChain?"
 ```
 
 ### Modifying the System Prompt
 
-Edit the `prompt` variable in `src/chain.py` to customize the LLM's behavior:
-```python
-prompt = PromptTemplate(
-    template="""Your custom instructions here...
-    
-Context: {context}
-Question: {question}
-Answer:""",
-    input_variables=["context", "question"],
-)
-```
+Answer language is controlled by `RESPONSE_LANGUAGE` in `.env` (`ko` or `en`).
+
+To customize prompt text, edit `_prompt_for_language()` in `src/chain.py`.
 
 ### Using Different Ollama Models
 
-Change `OLLAMA_LLM_MODEL` in `.env`:
-- `llama2`: Smaller, faster
-- `neural-chat`: Good for conversation
-- `mistral`: Fast and capable
-- `dolphin-mixtral`: Larger, more capable
+**Chat models** (`OLLAMA_LLM_MODEL`):
+- `qwen2.5:7b` — default, lightweight, good Korean (~5 GB)
+- `qwen2.5:3b` — even lighter (~2 GB)
+- `qwen3.6:27b` — higher quality, much slower (~17 GB)
+- `llama3` — English-leaning alternative
 
-Make sure the model is pulled:
+**Embedding models** (`OLLAMA_EMBED_MODEL`):
+- `bge-m3` — default, Korean/multilingual retrieval
+- `nomic-embed-text` — English-focused, smaller
+
 ```bash
 ollama pull [model-name]
 ```
+
+After changing an embedding model, the index rebuilds automatically on next run.
 
 ## What's Happening Under the Hood
 
 When you ask a question:
 
-1. Your question is embedded using `nomic-embed-text`
+1. Your question is embedded using `OLLAMA_EMBED_MODEL` (e.g. `bge-m3`)
 2. Semantic similarity is calculated against all stored document chunks
 3. Top 3 most similar chunks are retrieved
-4. A prompt is constructed: `[system instruction] + [retrieved chunks] + [your question]`
-5. The prompt is sent to `llama3` running via Ollama
-6. The answer is streamed and printed
+4. A prompt is constructed in the configured language (`RESPONSE_LANGUAGE`)
+5. The prompt is sent to `OLLAMA_LLM_MODEL` (e.g. `qwen2.5:7b`) via Ollama
+6. The answer is printed
 
 ## Limitations
 
 - Answers are limited to content in your wiki
 - Default setup requires Ollama to be running; cloud providers need API keys in `.env`
-- Changing the embedding provider requires rebuilding the vector store (`--rebuild`)
-- Vector database is not distributed (local only)
+- Wiki content changes require `--rebuild`; embedding model changes rebuild automatically
+- Vector database is local only (not distributed)
 - No user authentication or multi-user support
-
-## Future Enhancements
-
-- Support for source attribution (showing which wiki file was used)
-- Web UI instead of CLI
-- Multi-document answer summarization
-- Support for non-markdown file formats
-- Streaming responses for long answers
-- Feedback/relevance scoring
 
 ## License
 
@@ -432,10 +497,6 @@ This project is provided as-is for your personal use.
 
 For issues or questions:
 1. Check the **Troubleshooting** section above
-2. Verify Ollama is running and models are installed
-3. Check `.env` configuration matches your setup
+2. Verify Ollama is running and both models are installed (`ollama list`)
+3. Check `.env` configuration — especially LLM vs embedding model roles
 4. Review wiki file formatting (should be standard markdown)
-
----
-
-**Happy learning with your local RAG system!** 🚀
