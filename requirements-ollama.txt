@@ -5,3 +5,5 @@ langchain-ollama
 langchain-chroma
 chromadb
 python-dotenv
+fastapi
+uvicorn[standard]

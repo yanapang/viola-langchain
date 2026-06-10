@@ -54,6 +54,20 @@ A retrieval-augmented generation (RAG) system that connects your local markdown 
 
   첫 실행은 위키 인덱싱 때문에 시간이 걸릴 수 있습니다.
 
+### FastAPI 서버로 실행하기
+
+외부 프론트엔드와 연결하려면:
+
+```bash
+uvicorn src.api:app --reload
+```
+
+- `POST /ask` — 일반 JSON 응답
+- `POST /ask/stream` — 토큰 스트리밍 (SSE)
+- API 문서: `http://localhost:8000/docs`
+
+> **포트 변경**: `uvicorn src.api:app --reload --port 8080`
+
 ### 위키를 수정한 경우
 
 ```bash
