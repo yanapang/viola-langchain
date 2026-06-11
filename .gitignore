@@ -1,12 +1,53 @@
+# Secrets & local config
 .env
 .env.local
+
+# Vector DB
 .chroma/
+
+# Python
 __pycache__/
 *.pyc
 *.pyo
+*.pyd
 *.egg-info/
+*.egg
 dist/
 build/
-.DS_Store
+.eggs/
+site-packages/
+pip-wheel-metadata/
+
+# Virtual environments
 .venv/
 venv/
+env/
+ENV/
+
+# Testing & coverage
+.pytest_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# Type checking
+.mypy_cache/
+.pytype/
+
+# Jupyter Notebooks
+.ipynb_checkpoints/
+*.ipynb
+
+# Logs
+*.log
+logs/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDEs
+.idea/
+.vscode/
+.cursor/
+.claude/

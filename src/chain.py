@@ -12,6 +12,7 @@ def format_docs(docs):
 def _prompt_for_language(language: str) -> PromptTemplate:
     if language == "ko":
         template = """제공된 맥락만을 바탕으로 질문에 답하세요.
+절대 중국어로 답하지 마세요. 한국어 또는 영어로만 답하세요.
 맥락에 답이 없으면 모른다고 한국어로 답하세요.
 
 맥락:
@@ -22,7 +23,7 @@ def _prompt_for_language(language: str) -> PromptTemplate:
 답변:"""
     else:
         template = """You are a helpful assistant answering questions based on the provided context.
-If the context does not contain the answer, say you do not know.
+If the context does not contain the answer, say you do not know. Answer in English. Do not answer in Chinese.
 
 Context:
 {context}
